@@ -93,7 +93,8 @@ function low_rank_tensor_completion_embedded()
             Xfull = full(X.X);
             store.PXmPA = P.*Xfull - PA;
         end
-        f = .5*norm(store.PXmPA)^2;    end
+        f = .5*norm(store.PXmPA)^2;
+    end
 
     % Define the Euclidean gradient of the cost function, that is, the
     % gradient of f(X) seen as a standard function of X.
