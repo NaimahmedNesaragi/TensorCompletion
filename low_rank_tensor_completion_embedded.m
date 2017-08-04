@@ -31,13 +31,13 @@ function low_rank_tensor_completion_embedded()
 % Gennadij Heidel, July 19, 2017
 % 
     
-    
+    rng('default')
     
 
     % Random data generation with pseudo-random numbers from a 
     % uniform distribution on [0, 1].  
-    tensor_dims = [30 10 20 30];
-    core_dims = [6 2 4 5];
+    tensor_dims = [40 30 20];
+    core_dims = [5 4 3];
     total_entries = prod(tensor_dims);
     d = length(tensor_dims);
     
@@ -66,7 +66,7 @@ function low_rank_tensor_completion_embedded()
     
     % Generate a random mask P for observed entries: P(i, j, k) = 1 if the entry
     % (i, j, k) of A is observed, and 0 otherwise.
-    fraction = 0.05; % Fraction of known entries.
+    fraction = 0.1; % Fraction of known entries.
     nr = round(fraction * total_entries);
     ind = randperm(total_entries);
     ind = ind(1 : nr);
@@ -85,28 +85,32 @@ function low_rank_tensor_completion_embedded()
     problem.M = embedded_tensor_factory(tensor_dims, core_dims);
     
     
-    % Define the problem cost function.
+    % Define the problem cost function. The store structure is used to minimize
+    % full tensor evaluations.
     problem.cost = @cost;
-    function f = cost(X)
-        Xfull = full(X.X);
-        Difften = P.*Xfull - PA;
-        f = .5*norm(Difften)^2;
-    end
+    function [f,store] = cost(X, store)
+        if ~isfield(store, 'PXmPA')
+            Xfull = full(X.X);
+            store.PXmPA = P.*Xfull - PA;
+        end
+        f = .5*norm(store.PXmPA)^2;    end
 
     % Define the Euclidean gradient of the cost function, that is, the
     % gradient of f(X) seen as a standard function of X.
     problem.egrad =  @egrad;
-    function [g] = egrad(X)
-        g = P.*full(X.X)-PA;
+    function [g,store] = egrad(X, store)
+        if ~isfield(store, 'PXmPA')
+            Xfull = full(X.X);
+            store.PXmPA = P.*Xfull - PA;
+        end
+        g = store.PXmPA;
     end
     
     % Define the Euclidean Hessian of the cost at X.
     problem.ehess = @ehess;
-    function [Hess] = ehess(X, eta)
-        
+    function [H] = ehess(X, eta)
         ambient_H = problem.M.tangent2ambient(X,eta);
-        Hess = P.*ambient_H;
-        
+        H = P.*ambient_H;
     end
     
     % Options
@@ -114,8 +118,10 @@ function low_rank_tensor_completion_embedded()
     options.maxiter = 3000;
     options.maxinner = 100;
     options.maxtime = inf;
+    options.storedepth = 3;
     % Relative residual in gradient norm wanted
-    options.tolgradnorm = 1e-6*problem.M.norm(X0,problem.M.egrad2rgrad(X0,problem.egrad(X0)));        
+    store.PXmPA = P.*full(X0.X) - PA;
+    options.tolgradnorm = 1e-8*problem.M.norm(X0,problem.M.egrad2rgrad(X0,problem.egrad(X0,store)));        
 
      % Minimize the cost function using Riemannian trust-regions
     [Xtr,~,~,~] = trustregions(problem, X0, options);
@@ -123,7 +129,7 @@ function low_rank_tensor_completion_embedded()
     % Postprocessing
     Xtrfull = full(Xtr.X);
     fprintf('||X-A||_F / ||A||_F = %g\n', norm(Xtrfull - A)/norm(A));
-    fprintf('||PX-PA||_F / ||PA||_F = %g\n', sqrt(2*problem.cost(Xtr))/norm(PA));
+    fprintf('||PX-PA||_F / ||PA||_F = %g\n', sqrt(2*problem.cost(Xtr,store))/norm(PA));
     pause;
     
     % Check the model quality in a critical point. The model order should
