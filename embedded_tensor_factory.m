@@ -31,7 +31,7 @@ function M = embedded_tensor_factory(tensor_size, tensor_rank)
 %       Year    = {2017}
 %     }
 %
-% Gennadij Heidel, July 19, 2017
+% Gennadij Heidel, September 7, 2017
 % 
 
     % Tensor size and rank
@@ -264,13 +264,20 @@ function M = embedded_tensor_factory(tensor_size, tensor_rank)
     function X = random()
         U = cell(0);
         R = cell(0);
+        Q = cell(0);
         for i=1:d
             [U{end+1}, R{end+1}] = qr(rand(n(i),r(i)), 0);
         end
         C  = tenrand(r);
         C = ttm(C,R);
         
-        Y = ttensor(C,U);
+        % Peform an HSOVD of the core to ensure all-orthogonality
+        Z = hosvd(C,r);
+        for i=1:d
+            U{i} = U{i}*Z.U{i};
+        end
+        
+        Y = ttensor(Z.core,U);
         X.X = Y;
         Cpinv = cell(0);
         for i=1:d
